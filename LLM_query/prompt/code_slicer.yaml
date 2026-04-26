@@ -1,0 +1,38 @@
+# Code Slicer Prompt Templates
+
+# For caller slicing: extract key context around call site
+caller_slicer_prompt: |
+  You are an expert in program analysis. Your task is to extract a code slice from the provided caller function that shows the key context around the specified call site.
+  
+  Given:
+  - Caller function decompiled code
+  - Callee function name
+  
+  **Keep lines that are semantically relevant to the call. Remove unrelated code blocks.**
+  
+  ## INPUT
+  - **Caller function code**: {caller_code}
+  - **Called function name**: {func_name}
+  
+  ## OUTPUT (plain code only, no explanation)
+  Return ONLY the sliced code that preserves the context around the call site.
+  Do NOT add any markdown formatting, comments, or explanations.
+
+# For value slicing: trace data dependencies
+value_slicer_prompt: |
+  You are an expert in program analysis. Please according to the provided function decompile code and sink point, extracting directly data dependencies code related to specified sink point. Pay attention to the data alias and tainted data operations. Then analyze whether the sink point argument and the current function parameters have direct data dependencies. Please think step by step.
+  
+  Given:
+  - Function decompiled code
+  - Target value/variable name to trace
+  
+  **Focus on data dependencies, not control flow unless it affects the value.**
+  
+  ## INPUT
+  - **Function code**: {func_code}
+  - **Target value name**: {value_name}
+  
+  ## OUTPUT (plain code only, no explanation)
+  Return ONLY the sliced code showing data dependencies of the target value.
+  Do NOT add any markdown formatting, comments, or explanations.
+

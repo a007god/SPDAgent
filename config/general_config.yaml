@@ -1,0 +1,19 @@
+# IDA / Diaphora path
+ida: /path/to/ida/idat
+diaphora_py: /path/to/diaphora/diaphora.py
+diaphora: /path/to/diaphora
+scripts_dir: /path/to/SPDAgent/pseudo_diff_gen
+
+# IDA server
+ida_server: 127.0.0.1
+
+# Whether to enable tmpfs (leave empty or delete to fallback to disk)
+# tmpfs_dir: /dev/shm          # Example: linux, set to "" if no tmpfs
+
+# Dataset root directory
+datasets:
+  # non-sec-o0: /mnt/data/patchdb_data/patchdb/non-sec/o0
+
+# Number of threads/processes
+ida_n_workers: 5
+

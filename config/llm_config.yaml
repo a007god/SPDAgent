@@ -1,0 +1,32 @@
+# LLM config
+worker:
+  analysis: # Use the best model
+  # api
+    OPENAI_API_KEY: ...
+
+  # base url
+    OPENAI_API_BASE: ...
+
+  # model
+    model_name: 
+      gpt-5-mini: "gpt-5-mini"
+
+
+  helper: # Use smaller model here
+    # api
+      OPENAI_API_KEY: ...
+
+    # base url
+      OPENAI_API_BASE: ...
+
+    # model
+      model_name: 
+        gpt-5-nano: gpt-5-nano
+
+# prompt
+prompt_path:
+  root_cause_analysis_template: /path/to/SPDAgent/LLM_query/prompt/root_cause_analysis.yaml
+  actor_prompt: /path/to/SPDAgent/LLM_query/prompt/actor_tools.yaml
+  early_classification_template: /path/to/SPDAgent/LLM_query/prompt/early_classification.yaml
+  code_slicer_template: /path/to/SPDAgent/LLM_query/prompt/code_slicer.yaml
+  #

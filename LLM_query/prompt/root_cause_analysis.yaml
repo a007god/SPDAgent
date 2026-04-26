@@ -1,0 +1,179 @@
+root_cause_analysis_prompt: |
+  You are a senior security engineer. Using **all available pseudo-code context**, build the **complete, evidence-backed root-cause and trigger chain** if the patch fix vulnerability.
+
+  ## INSTRUCTIONS
+  1. **Review & Integrate Context** 
+    Review the `Patch Code` and the enriched data involved. Your previous analysis and request results are included in the `History record`.
+    • Classify Patch  (`is_security_patch`: `yes` or `no`).  
+    • Explain how each patch hunk mitigates risk or not, citing `line`.  
+    → Populate `is_security_patch`, `repair_strategy`.
+
+
+  2. **Extend Chain from Code**  
+     Trace calls / data flow step-by-step, citing `line` for each fact.  
+     Where evidence ends, insert  
+     `GAP: <why evidence stops>`.
+
+  3. **Request Missing Context**  
+     If any critical gap remains:  
+       • set `"need_context": true` 
+       • add precise, non-duplicate requests to `"required_context"` using **only**:  
+         - `function: …` (`e.g. function: I need the function X`.)
+         - `caller: …` (`e.g. caller: I need the callers of function X`.)
+         - `value: …` (`e.g. value: I need the data dependencies of value V in function X`.)
+           **IMPORTANT**: For value requests, you MUST specify BOTH the value name AND the function name.
+       • **DO NOT** request the new patch code.
+       • **DO NOT** reissue any failed requests that already appear in the Tools record; a failure means the context does not exist and has already been thoroughly searched. 
+     If the chain is fully evidenced from the patch, or no additional information is available, set `"need_context": false`.
+
+  4. **Score Confidence**  
+     *Full chain with direct evidence* ≥ 0.90.
+
+  ## INPUTS
+  - **iteration number**: {iteration}
+  - **Patch Code and context**: {patch}
+  - **last analysis**: {last_analysis}
+  - **Tools record**: {tools_record}
+
+  ## IDENTIFIER MAPPING & NOTATION (preprocessed)
+  - Patch is based on the **old version**. 
+  - The patch has been preprocessed to infer a **partial** mapping between old/new variable and function names(e.g. IDA will do variable rename which cause long diff text).
+  - func/variable name:
+    - **Canonical (default)**: bare names like `v2`, `read_cfg` denote **old-side** symbols (or **new-side symbols mapped to old names**).
+    - **Unmapped new-side**: appear as `<N:name>` (e.g., `<N:limit>`). Treat these as distinct from any bare `name`.
+
+  ## OUTPUT  (MUST be valid JSON, no trailing commas)
+    ```json
+    {{
+        "is_security_patch": "yes | no",
+        "vulnerability_type": "CWE-xxx | none", // infer the <CWE type> ONLY IF "is_security_patch" is <yes>, otherwise <none>.
+        "repair_strategy": "<citing func:line from the patch>",
+        "analysis": "Summary of iteration progress, remaining gaps, explanation for new context requests (if any). If complete, summarize the full chain.",
+        "need_context": true/false, 
+        "required_context": "<list of precise context requests>" ,
+        "root_cause": "<Partial/complete trace with line evidence from ALL available context>"
+        "confidence_score": 0.0-1.0
+    }}
+    ```
+
+  ## RULES
+    * **Reject every hypothesis or inference** - When evidence is missing, always declare a GAP and request the needed context.
+    * **Stop Condition** – Terminate only when <the trigger chain is fully evidenced from the patch> or <The required context can't be satisfied>; else continue requesting context.
+
+
+
+root_cause_analysis_prompt_limited: |
+  You are a senior security engineer. please decide the patch provided is security-related or not.
+
+  ## DECISION RULES
+
+  1. When to mark `"is_security_patch": "yes"`
+       - You can describe a path from externally influenced or untrusted input to a security impact
+         (e.g., RCE, privilege escalation, auth/ACL bypass, sensitive info leak, DoS).
+       - Each key step of this path is supported by specific code evidence from the patch/context (cite function:line).
+
+  2. When to mark `"is_security_patch": "no"`
+       - The changes mainly match non-security patterns such as:
+         - logging / diagnostics only (more prints, logs, tracing, no effect on control flow or return values),
+         - refactor / style / renaming / reordering without semantic change,
+         - pure performance / resource optimization,
+         - new feature or functional enhancement that does not fix an unsafe old behavior,
+         - test / validation helpers that only observe behavior.
+       - You CANNOT construct a credible, step-by-step attack path from the available code, even after considering tools record.
+       - The supposed "attack" would require multiple strong assumptions that are not supported by the code.
+
+  3. Request Missing Context
+     If any critical gap remains:  
+       • set `"need_context": true` 
+       • add precise, non-duplicate requests to `"required_context"` using **only**:  
+         - `function: …` (`e.g. function: I need the function X`.)
+         - `caller: …` (`e.g. caller: I need the callers of function X`.)
+       • `function' and 'caller' only return code context. 'caller' will not return the complete list, but at most 3 callers.
+       • 'value' or 'structure' is not available in toolset.
+       • **DO NOT** request the new patch code.
+       • **DO NOT** reissue any failed requests that already appear in the Tools record; a failure means the context does not exist and has already been thoroughly searched. 
+     If the chain is fully evidenced from the patch, or no additional information is available, set `"need_context": false`.
+
+  4. Score Confidence  
+     *Full chain with direct evidence* ≥ 0.90. 
+
+  ## INPUTS
+  - iteration number: {iteration}
+  - Patch Code and context: {patch}
+  - last analysis: {last_analysis}
+  - Tools record: {tools_record}
+
+  ## OUTPUT (MUST be valid JSON, no comments, no trailing commas)
+  ```json
+  {{
+    "is_security_patch": "yes or no",
+    "vulnerability_type": "CWE-xxx or none",
+    "repair_strategy": "Explain how each patch hunk mitigates (or does NOT mitigate) risk, with func:line citations when possible.",
+    "analysis": "Short summary of this iteration: what you concluded, what remains uncertain, and why you did or did not request more context.",
+    "need_context": true or false,
+    "required_context": "<list of precise context requests>",
+    "root_cause": "If is_security_patch=yes: a partial or complete trace of the vulnerability and trigger chain, with line evidence. If is_security_patch=no: explain why the patch is non-security (e.g., refactor, logging, performance, feature-only).",
+    "confidence_score": 0.0-1.0 (to indicate the confidence of your decision)
+  }}
+  ```
+
+#strict prompt: trace the full attack path from the patch. 
+root_cause_analysis_prompt_rigorous: | 
+  You are a senior security engineer. The pre-filter may over-approximate and treat many normal changes as potential security patches. Your task in this stage is to make the FINAL decision: is this patch truly security-relevant or just a normal change?
+
+  ## GOAL
+  Decide whether the patch fixes a real security vulnerability, and explain the decision with code evidence. Many patches are NON-security; only mark "yes" when there is a clear, evidenced attack path.
+
+  ## DECISION RULES
+
+  1. When to mark `"is_security_patch": "yes"`
+       - You can describe a path from externally influenced or untrusted input to a security impact
+         (e.g., RCE, privilege escalation, auth/ACL bypass, sensitive info leak, serious DoS).
+       - Each key step of this path is supported by specific code evidence from the patch/context (cite function:line).
+       - Without the patch, the old behavior is realistically exploitable by an attacker.
+
+  2. When to mark `"is_security_patch": "no"`
+     Mark "no" when ANY of the following holds:
+       - The changes mainly match non-security patterns such as:
+         - logging / diagnostics only (more prints, logs, tracing, no effect on control flow or return values),
+         - refactor / style / renaming / reordering without semantic change,
+         - pure performance / resource optimization,
+         - new feature or functional enhancement that does not fix an unsafe old behavior,
+         - test / validation helpers that only observe behavior.
+       - You CANNOT construct a credible, step-by-step attack path from the available code, even after considering tools record.
+       - The supposed "attack" would require multiple strong assumptions that are not supported by the code.
+
+  3. Context requests (`need_context` / `required_context`)
+     - Request more context ONLY when you already see a plausible attack direction but are missing 1–2 critical code pieces
+       (e.g., body of a specific function, callers of a specific function).
+     - Use ONLY the following formats in `required_context` (one per line):
+         - `function: <function_name>`   (you need the full pseudocode of this function)
+         - `caller: <function_name>`     (you need up to 3 callers of this function)
+     - DO NOT repeat any request that already FAILED according to the tools record (assume that context does not exist).
+
+  4. Score Confidence 
+     *Full chain with direct evidence* ≥ 0.90.
+
+  5. Risk Level Assessment (risk_level)
+     Assign risk_level ONLY if "is_security_patch": "yes", for triage/prioritization. Set "critical"/"high" only when you are certain the vulnerability is truly exploitable; otherwise use "medium"/"low". If "is_security_patch": "no", set "risk_level": "none".
+
+  ## INPUTS
+  - iteration number: {iteration}
+  - Patch Code and context: {patch}
+  - last analysis: {last_analysis}
+  - Tools record: {tools_record}
+
+  ## OUTPUT (MUST be valid JSON, no comments, no trailing commas)
+  ```json
+  {{
+    "is_security_patch": "yes or no",
+    "risk_level": "critical | high | medium | low | none",
+    "vulnerability_type": "CWE-xxx or none",
+    "repair_strategy": "Explain how each patch hunk mitigates (or does NOT mitigate) risk, with func:line citations when possible.",
+    "analysis": "Short summary of this iteration: what you concluded, what remains uncertain, and why you did or did not request more context.",
+    "need_context": true or false,
+    "required_context": "<list of precise context requests>",
+    "root_cause": "If is_security_patch=yes: a partial or complete trace of the vulnerability and trigger chain, with line evidence. If is_security_patch=no: explain why the patch is non-security (e.g., refactor, logging, performance, feature-only).",
+    "confidence_score": 0.0-1.0 (to indicate the confidence of your decision)
+  }}
+  ```

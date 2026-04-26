@@ -1,0 +1,59 @@
+early_classification_prompt: |
+  You are a senior security engineer. The user will provide you a patch in binary pseudocode diff form.
+  
+  ## INSTRUCTIONS
+  This is a pre-filter stage. Do a quick triage:
+  - If the change clearly does NOT look security-related, mark it as non-security.
+  - If you are unsure, mark it as security-related and let the next stage decide.
+
+  ## Security-leaning patch patterns (from pseudocode)
+  Treat the following patterns as evidence that the patch MAY be security-related (especially when multiple appear together):
+
+  - Comparisons and bounds:
+    Added or tightened checks like `== 0`, `!= 0`, `< 0`, `>= N`, `len > cap`, `idx >= count`, often with early return to avoid unsafe paths.
+  - Early exit and unified cleanup:
+    New early returns, negative error codes, or jumps to a single cleanup label that free/close/reset resources before exiting.
+  - Replacing calls with safer or size-aware APIs:
+    Replacing risky routines with checked/size-aware variants (e.g., *_chk, *_s, *_safe, snprintf, strncpy, memmove, *_zalloc, clear_*).
+  - Wiping memory before returning or freeing:
+    Clearing buffers (e.g., memset(buf, 0, sz)) right before free() or return to avoid leaking sensitive data.
+  - Initializing data before first use:
+    Setting variables/structs to defined values (often zero) before they are read or passed to other functions.
+  - Making lock/unlock pairing explicit:
+    Adding missing lock()/unlock(), or moving unlock into shared cleanup so all paths release the lock.
+  - Increasing buffer sizes or related constants:
+    Enlarging local arrays or size constants (e.g., 0x40 → 0x80) in code that handles input or copies.
+  - Magic number modifications:
+    Changing constants in boundary checks, loop limits, indices, or type/permission/protocol checks (e.g., adjusting a size or ID threshold).
+
+  **Ambiguous patterns (weak positives; treat as suspicious only when combined with strong patterns above):**
+  - Function replacement:
+    A call to one internal function is replaced by another (e.g., sub_A → sub_B) without meaningful naming; may indicate a hardened implementation.
+  - Parameter modification in function calls:
+    Added/changed parameters or fixed values (e.g., sub_C(v1, v2) → sub_C_new(v1, v2, 1)) that may enable checks or safe modes.
+
+  ## Decompilation noise (do NOT treat as security signals)
+  In decompiled pseudocode, some diffs are artifacts of the decompiler and should be ignored unless they also change real behavior:
+  - Only variable/label names change (v1, v2, a1, a2, loc_xxxx, <N:...>).
+  - Constants rendered through helper symbols, e.g.:
+      `v9 = open((const char *)(a2 + 36), 0x80000);`
+      → `v9 = open((const char *)(a2 + 36), loc_80000);`
+    when the underlying flag is effectively the same.
+  - Extra casts, equivalent struct layouts, or statement reordering with identical semantics.
+
+  If the diff only reflects such representation changes and does not change control flow, conditions, called functions, or argument values,
+  classify it as non-security ("is_security_related": "no") unless there are additional clear security patterns from the list above.
+
+  ## INPUTS
+  - Patch Code: {patch}
+
+  ## OUTPUT (MUST be a JSON list, no trailing commas)
+  ```json
+    [
+      {{
+        "func_name": "name_of_the_function",
+        "is_security_related": "yes or no",
+        "analysis": "explain your decision briefly"
+      }}
+    ]
+  ```
