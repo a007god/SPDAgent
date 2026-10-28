@@ -28,4 +28,8 @@ Run a quick sample
 Notes
 - For custom datasets, add paths under `datasets` in `config/general_config.yaml`.
 
-The SPD-BIN dataset will be released and updated in this repository in the future.
+Dataset availability
+--------------------
+
+The SPD-BIN dataset is approximately 100 GB in size (uncompressed).
+To request access to the dataset, please contact [yangfr23@tsinghua.org.cn](mailto:yangfr23@tsinghua.org.cn).
